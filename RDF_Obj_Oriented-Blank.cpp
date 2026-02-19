@@ -7,6 +7,8 @@ id, type, element, xu, yu, zu
 Assumes the configuration has only a single atom type
 
 R. K. Lindsey (2023)
+
+Edited by Yvonne Amaria (2026)for Project 1 simulation of condensed matter systems. 
 */
 
 
@@ -17,6 +19,7 @@ R. K. Lindsey (2023)
 #include<sstream>
 #include<vector>
 #include<cmath>
+#include <filesystem>
 
 
 using namespace std;
@@ -120,12 +123,17 @@ configuration::configuration(string traj_file)
 {
     cout << "Will read from trajectory file: " << traj_file << endl;
     trajstream.open(traj_file);
+    if (!trajstream.is_open()) {
+        cerr << "ERROR: Could not open trajectory file: " << traj_file << endl;
+        exit(1);
+    }
 }
 
 configuration::~configuration()
 {
     trajstream.close();
 }
+
 
 bool configuration::read_frame()
 {    
@@ -170,23 +178,32 @@ bool configuration::read_frame()
     
     coords.clear();
     xyz     coordinate;
-    
+
     for (int i=0; i<natoms; i++)
     {
         line = get_next_line(trajstream);
-        
-        //cout << "   ...read line: " << line << endl;
-        
-        coordinate.x = stod(get_token(line,3));
-        coordinate.y = stod(get_token(line,4));
-        coordinate.z = stod(get_token(line,5));
-        
-        coords.push_back(coordinate);
-        
-        //cout << coords[i].x << " " << coords[i].y << " " << coords[i].z << endl;
 
+        vector<string> tokens;
+        tokenize(line, tokens);
+
+        // Expect: id type element xu yu zu  (>= 6 tokens)
+        if ((int)tokens.size() < 6) {
+            cerr << "ERROR: Bad atom line while reading trajectory.\n"
+                << "  File may be truncated or not in expected lammpstrj format.\n"
+                << "  Atom index i=" << i << " (0-based)\n"
+                << "  Line: [" << line << "]\n"
+                << "  Tokens parsed: " << tokens.size() << "\n";
+            exit(1);
+        }
+
+        // tokens[3], [4], [5] are xu, yu, zu for your expected format
+        coordinate.x = stod(tokens[3]);
+        coordinate.y = stod(tokens[4]);
+        coordinate.z = stod(tokens[5]);
+
+        coords.push_back(coordinate);
     }
-    //cout << "=============" << coords.size << endl;
+    
     
     if (!called_before)
         called_before = true;
@@ -194,19 +211,42 @@ bool configuration::read_frame()
     return true;
 }
 
+
 double configuration::get_dist(int i, int j)
 {
     // Compute and return the minimum image convention distance between a pair of particles i and j
 
+    double dx = coords[j].x - coords[i].x;
+    double dy = coords[j].y - coords[i].y;
+    double dz = coords[j].z - coords[i].z;
+
+    dx -= boxdims.x * round(dx/boxdims.x);
+    dy -= boxdims.y * round(dy/boxdims.y);
+    dz -= boxdims.z * round(dz/boxdims.z);
+
+    return sqrt(dx*dx + dy*dy + dz*dz);
 }
+
 
 int get_rdf_bin(int nbins, double binw, double dist)
 {
     // Determine the shell bin index the current distance falls in. 
+    int b = (int)(dist / binw);
+    if (b < 0) b = 0;
+    if (b >= nbins) b = nbins - 1;
+    return b;
+
+
 }
+
 
 int main(int argc, char* argv[])
 {
+    if (argc < 3) {
+        cerr << "Usage: " << argv[0] << " <trajfile> <binw> [outfile]\n";
+        return 1;
+    }
+
     // Set up the data structure for reading/operating on the trajectory file
     
     string trajfile = argv[1]; //"/Users/becky/Library/CloudStorage/OneDrive-Umich/Virtual_Macbook/Documents/Teaching/CHE_496-696-Simulation/Codes/Monte_Carlo-Inline/indep-1.0.4.MC_traj.lammpstrj";
@@ -222,20 +262,36 @@ int main(int argc, char* argv[])
     
     // Read the trajectory file and accumulate RDF data, frame-by-frame
     
-    int nframes = 1;
+    // int nframes = 1;
     
-    while(frame.read_frame()) // Read and populate the number integral
-    {
+    // while(frame.read_frame()) // Read and populate the number integral
+    // {
     
-        if (nframes == 1) // Then set up RDF
-        {
-            nbins = /* complete this */; // Set the number of bins based on the system box length and the requested bin width. 
-            num_int.resize(nbins,0);
+    //     if (nframes == 0) // Then set up RDF
+    //     {
+    //         // nbins = /* complete this */; // Set the number of bins based on the system box length and the requested bin width. 
+    //         nbins = (int)( (0.5*frame.boxdims.x) / binw ) + 1;
+    //         num_int.resize(nbins,0);
             
-            cout << "Setting nbins, binw to: " << nbins << " " << binw << endl; 
-        }
+    //         cout << "Setting nbins, binw to: " << nbins << " " << binw << endl; 
+    //     }
         
+    //     nframes++;
+
+    int nframes = 0;
+
+    while(frame.read_frame())
+    {
+        if (nframes == 0)
+        {
+            nbins = (int)((0.5*frame.boxdims.x) / binw) + 1;
+            num_int.assign(nbins, 0);
+            cout << "Setting nbins, binw to: " << nbins << " " << binw << endl;
+        }
+
         nframes++;
+        
+
         
         // Populate the single frame
         
@@ -246,13 +302,15 @@ int main(int argc, char* argv[])
                 double dist = frame.get_dist(i,j);
                 
                 // Determine which shell the current atom pair distance is in
-                
-                if (/*complete this criteria for whether the current distance should be added to the num_int histogram*/)
+                if (dist < 0.5*frame.boxdims.x)
                     num_int[get_rdf_bin(nbins, binw, dist)] += 2; // Add two to account for both i and j
+
+                // if (/*complete this criteria for whether the current distance should be added to the num_int histogram*/)
+                //    num_int[get_rdf_bin(nbins, binw, dist)] += 2; // Add two to account for both i and j
             }
         }
     }
-    
+
     // Print out the RDF & number integral
     
     
@@ -260,27 +318,56 @@ int main(int argc, char* argv[])
     
     double sanity = 0;
     
-    ofstream rdfstream;
-    rdfstream.open("rdf.dat");
+    // ofstream rdfstream;
+    // rdfstream.open("rdf.dat");
+
+    namespace fs = std::filesystem;
+
+    fs::path trajpath(trajfile);
+    // fs::path outpath = trajpath.parent_path() / "rdf.dat";
+    fs::path outpath;
+    if (argc >= 4) outpath = fs::path(argv[3]);
+    else           outpath = fs::path(trajfile).parent_path() / "rdf.dat";
+
+
+    ofstream rdfstream(outpath);
+    if (!rdfstream.is_open()) {
+        cerr << "ERROR: Could not open output file: " << outpath << endl;
+        return 1;
+    }
+
+cout << "Writing RDF to: " << outpath << endl;
+
     
     rdfstream << "# Distance (Ang)      Number Integral (atoms)     RDF (unitless)" << endl;
     
      double avg_nint    = 0;
      double ideal_nint  = 0;
     
+
+     double frames_used = (double)nframes;
+     // double frames_used = (double)(nframes-1); // because nframes++ after each read
      for (int i=0; i<nbins-1; i++)
      {
-         double radius              = /* complete this */;  
-         double shell_vol           = /* complete this */;
-         double shell_density       = /* complete this */;
-         double shell_density_ideal = /* complete this */;
-         double avg_rdf             = /* complete this */;
+         double r_in  = i * binw;
+         double r_out = (i+1) * binw;
+         double radius = r_out;
 
-         avg_nint           += shell_density;
+         double shell_vol = (4.0/3.0)*pi*(pow(r_out,3.0) - pow(r_in,3.0));
 
-         rdfstream << radius << " " << avg_nint << " " << avg_rdf  << endl;
-         
+         // avg # atoms in this shell per particle
+         double shell_density = (num_int[i] / frames_used) / frame.natoms;
+
+         // ideal expected # in shell
+         double shell_density_ideal = frame.density * shell_vol;
+
+         double avg_rdf = shell_density / shell_density_ideal;
+
+         avg_nint += shell_density;
+
+         rdfstream << radius << " " << avg_nint << " " << avg_rdf << endl;
      }
+
     
     rdfstream.close();
     
