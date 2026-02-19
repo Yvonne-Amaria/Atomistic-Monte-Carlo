@@ -1,0 +1,88 @@
+############################################
+# OS / Editor
+############################################
+.DS_Store
+Thumbs.db
+
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+############################################
+# C/C++ build artifacts
+############################################
+# binaries
+a.out
+*.out
+*.exe
+Monte_Carlo
+Mont
+*/Monte_Carlo
+
+# objects / libs
+*.o
+*.obj
+*.so
+*.dylib
+*.a
+*.la
+*.lo
+
+# build dirs
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+############################################
+# Logs / runtime output
+############################################
+*.log
+*.err
+*.out
+*.txt
+
+# SLURM
+slurm-*.out
+slurm-*.err
+
+# timing files (your /usr/bin/time -o ...)
+*timing*.dat
+Monte_Carlo_timing.dat
+
+############################################
+# Simulation outputs
+############################################
+# trajectories
+*.lammpstrj
+MC_traj.lammpstrj
+
+# results folder(s)
+results/
+output/
+outputs/
+runs/
+
+# any big data dumps
+*.csv
+*.tsv
+
+############################################
+# Archives
+############################################
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.gz
+*.sbatch
+
+############################################
+# Misc
+############################################
+*.tmp
+*.bak
