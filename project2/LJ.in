@@ -1,0 +1,68 @@
+# ============================================================
+# NVT Molecular Dynamics Simulation of Argon (LJ fluid)
+# Project 2 - CHE 496/696
+# Units: real (kcal/mol, Angstrom, fs)
+# ============================================================
+
+# ---- Variables (override from command line with -var) ----
+variable  rho_star  index  0.5        # reduced density rho* = rho * sigma^3
+variable  nrepl     index  5          # replications per axis; 4*nrepl^3 = natoms
+
+# ---- LJ Parameters for Argon ----
+variable  sigma    equal  3.4         # Angstrom
+variable  eps_kB   equal  120.0       # K  (epsilon/kB)
+variable  molmass  equal  39.948      # g/mol
+variable  T_K      equal  144.0       # K
+
+# Convert epsilon to kcal/mol:  eps [kcal/mol] = eps_kB [K] * kB [kcal/mol/K]
+variable  kB_kcal  equal  0.001987204  # kcal/(mol*K)
+variable  eps      equal  ${eps_kB}*${kB_kcal}   # kcal/mol
+
+variable  rcut     equal  4.0*${sigma}  # cutoff = 4 sigma
+
+# ---- Box length from reduced density ----
+# rho* = N * sigma^3 / V  =>  L = (N/rho*)^(1/3) * sigma
+variable  natoms   equal  4*${nrepl}*${nrepl}*${nrepl}
+variable  Lbox     equal  (${natoms}/${rho_star})^(1.0/3.0)*${sigma}
+
+# ---- I/O frequency ----
+variable  iofrq    index  50      # Part 1: print every 50 steps
+variable  nsteps   index  100000  # Part 1: 100 000 steps
+
+# ============================================================
+units       real
+atom_style  atomic
+boundary    p p p
+
+# ---- Build FCC lattice ----
+# FCC unit cell at the density we want
+variable  a_lat  equal  ${Lbox}/${nrepl}    # lattice constant in Angstrom
+
+lattice   fcc  ${a_lat}
+region    simbox block 0 ${nrepl} 0 ${nrepl} 0 ${nrepl}
+create_box  1 simbox
+create_atoms  1 box
+
+mass  1  ${molmass}
+
+# ---- Interactions ----
+pair_style  lj/cut  ${rcut}
+pair_coeff  1 1  ${eps}  ${sigma}  ${rcut}
+
+# ---- Initialization ----
+velocity  all create ${T_K} 12345 dist gaussian
+
+# ---- Thermostat: NVT Nose-Hoover ----
+fix  1 all nvt temp ${T_K} ${T_K} $(100.0*dt)
+
+# ---- Output ----
+thermo_style  custom step temp pe ke etotal econserve press
+thermo  ${iofrq}
+thermo_modify  norm yes    # report extensive quantities per atom
+
+# Dump unwrapped coordinates (required for MSD and RDF with PBC)
+dump  1 all custom ${iofrq} traj.lammpstrj id type element xu yu zu vx vy vz
+dump_modify  1 element Ar
+
+# ---- Run ----
+run  ${nsteps}
